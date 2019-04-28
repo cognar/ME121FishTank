@@ -1,0 +1,3 @@
+Map pinout of structure
+create main program file
+Create global variables to track salinity and temperature change, use to check if variables have changed and prevent screen update if they have not, will help limit screen flicker
