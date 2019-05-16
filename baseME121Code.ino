@@ -17,10 +17,13 @@ float reading;
 float average = 0;
 float standardDev = 4.5/2422.;
 float deadTime = 18000;       //Delay after solinity change
-float setPoint = 560./2422.;
+float setPoint = 182./2422.;
 long timeSinceChange = 0;
 float KpSalt = 0.00007216;      //This is maybe about right
 float KpDI = 4000;            //This is wrong in everyway
+int tankMass = 98;
+float overFlow = 0.15;
+float G = 0.8;
 
 
 void setup() {
@@ -59,12 +62,13 @@ void setup() {
 
 void loop() {
   reading = measureSalinity();
+  Serial.println(reading);
   updateScreen(reading);
   float error = reading - setPoint;
-    
-  if(millis() > timeSinceChange + deadTime){    //Check is deadtime has elapsed
-    adjustSalinity(error);
-  }
+  if((error > 3 * standardDev) || (error < -3 * standardDev))
+    if(millis() > timeSinceChange + deadTime){    //Check is deadtime has elapsed
+      adjustSalinity(error, getDeltaT(error, reading));
+    }
 }
 
 
@@ -81,13 +85,14 @@ void updateScreen(float message){
 
 
 float rawToSalinity(float rawRead){
+  Serial.print("RAW  ");Serial.println(rawRead);
   float salinity;
   if (rawRead < 142){
     salinity = rawRead / 10423.;
     
   }
   else{
-    salinity = rawRead / 2422.;
+    salinity = (rawRead - 400) / 2422.;
     
   }  
   return salinity;
@@ -110,18 +115,39 @@ float measureSalinity(){
 }
 
 
-void adjustSalinity(float error){
-    Serial.print("ERROR");Serial.println(error);
+void adjustSalinity(float error, int deltaT){
+    Serial.print("ERROR");Serial.println(deltaT);
+    
     //Serial.println(3*standardDev);
     if(error > 3 * standardDev){                //Water is too salty
       digitalWrite(diSolenoid, HIGH);
-      delay(error*KpDI);                        //this factor is all wrong
+      delay(deltaT);                        //this factor is all wrong
       digitalWrite(diSolenoid, LOW);
     }
     else if(error < -3 * standardDev){          //Water is not salty enough
       digitalWrite(saltSolenoid, HIGH);
-      delay(abs(error/KpSalt));                      //needs correction factor for overflow
+      delay(deltaT);                      //needs correction factor for overflow
       digitalWrite(saltSolenoid, LOW);    
     }
     timeSinceChange = millis();   
+}
+
+int getDeltaT(float error, float currentSalinity){
+  int deltaT;
+  float salinityToAdd;
+  float finalSalinity = currentSalinity + G*(setPoint - currentSalinity);
+  if(error < 0){
+    salinityToAdd = 0.1;
+  }
+  else if (error > 0){
+    salinityToAdd = 0;
+  }
+  float massToAdd = tankMass*(1/(1-overFlow))*(currentSalinity - finalSalinity)/(currentSalinity - salinityToAdd);
+  if(error < 0){
+    deltaT = (massToAdd*1000)/(6);
+  }
+  else if(error > 0){
+    deltaT = (massToAdd*1000)/(7);
+  }
+  return(deltaT);
 }
